@@ -12,7 +12,7 @@ Repozytorium obejmuje cały pipeline:
 
 ## Cel projektu
 
-Celem projektu jest sprawdzenie, jak dobrze proste modele potrafią przewidywać aktywność biologiczną związków chemicznych dla wybranego celu białkowego, oraz porównanie:
+Celem projektu przewidywanie aktywności biologicznej związków chemicznych oraz porównanie:
 - klasycznego podejścia opartego o fingerprinty,
 - podejścia grafowego,
 - łatwiejszego **random split** z bardziej wymagającym **scaffold split**.
@@ -43,7 +43,7 @@ Projekt został zbudowany wokół następującego workflow:
 
 ## Struktura repozytorium
 
-W repozytorium znajdują się obecnie notebooki i pliki Pythona odpowiadające kolejnym etapom pipeline’u: `EDA_ChEMBL.ipynb`, `data_preparation.py`, `prepare_dataset.ipynb`, `splits.py`, `mlp_model.py`, `train_mlp.ipynb`, `gnn_model.py`, `train_gnn.ipynb` oraz katalog `prepared_data/`. citeturn185153view0
+W repozytorium znajdują się obecnie notebooki i pliki Pythona odpowiadające kolejnym etapom pipeline’u: `EDA_ChEMBL.ipynb`, `data_preparation.py`, `prepare_dataset.ipynb`, `splits.py`, `mlp_model.py`, `train_mlp.ipynb`, `gnn_model.py`, `train_gnn.ipynb` oraz katalog `prepared_data/`.
 
 ```text
 ChEMBL-analysis/
