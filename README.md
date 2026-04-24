@@ -159,8 +159,6 @@ Projekt korzysta m.in. z:
 - PyTorch Geometric
 - matplotlib
 
-Przykładowa instalacja zależności zależy od środowiska, ale do pełnego uruchomienia potrzebne są przede wszystkim pakiety do chemoinformatyki i modeli grafowych.
-
 
 ## Źródło danych
 
