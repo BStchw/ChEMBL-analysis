@@ -10,7 +10,13 @@ from rdkit import Chem
 from torch import nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GCNConv, global_mean_pool
+from torch_geometric.nn import (
+    GCNConv,
+    GINEConv,
+    global_mean_pool,
+    global_add_pool,
+    global_max_pool,
+)
 
 
 def set_seed(seed: int = 42) -> None:
@@ -45,6 +51,36 @@ def atom_to_features(atom: Chem.rdchem.Atom) -> List[float]:
     ] + one_hot_hybridization(atom)
 
 
+BOND_TYPE_VALUES = [
+    Chem.rdchem.BondType.SINGLE,
+    Chem.rdchem.BondType.DOUBLE,
+    Chem.rdchem.BondType.TRIPLE,
+    Chem.rdchem.BondType.AROMATIC,
+]
+
+BOND_STEREO_VALUES = [
+    Chem.rdchem.BondStereo.STEREONONE,
+    Chem.rdchem.BondStereo.STEREOANY,
+    Chem.rdchem.BondStereo.STEREOZ,
+    Chem.rdchem.BondStereo.STEREOE,
+]
+
+EDGE_FEATURE_DIM = len(BOND_TYPE_VALUES) + 2 + len(BOND_STEREO_VALUES)
+
+
+def one_hot_value(value, allowed_values) -> List[float]:
+    return [1.0 if value == allowed else 0.0 for allowed in allowed_values]
+
+def bond_to_features(bond: Chem.rdchem.Bond) -> List[float]:
+    return (
+        one_hot_value(bond.GetBondType(), BOND_TYPE_VALUES)
+        + [
+            float(bond.GetIsConjugated()),
+            float(bond.IsInRing()),
+        ]
+        + one_hot_value(bond.GetStereo(), BOND_STEREO_VALUES)
+    )
+
 def smiles_to_data(smiles: str, target: Optional[float] = None) -> Optional[Data]:
     if smiles is None or not isinstance(smiles, str) or not smiles.strip():
         return None
@@ -60,18 +96,27 @@ def smiles_to_data(smiles: str, target: Optional[float] = None) -> Optional[Data
     x = torch.tensor(node_features, dtype=torch.float)
 
     edge_pairs = []
+    edge_features = []
+
     for bond in mol.GetBonds():
         i = bond.GetBeginAtomIdx()
         j = bond.GetEndAtomIdx()
+        bond_features = bond_to_features(bond)
+
         edge_pairs.append((i, j))
+        edge_features.append(bond_features)
+
         edge_pairs.append((j, i))
+        edge_features.append(bond_features)
 
     if edge_pairs:
         edge_index = torch.tensor(edge_pairs, dtype=torch.long).t().contiguous()
+        edge_attr = torch.tensor(edge_features, dtype=torch.float)
     else:
         edge_index = torch.empty((2, 0), dtype=torch.long)
+        edge_attr = torch.empty((0, EDGE_FEATURE_DIM), dtype=torch.float)
 
-    data = Data(x=x, edge_index=edge_index)
+    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
     if target is not None and not pd.isna(target):
         data.y = torch.tensor([[float(target)]], dtype=torch.float)
@@ -149,6 +194,96 @@ class GCNRegressor(nn.Module):
         x = self.lin2(x)
         return x
 
+
+class GINERegressor(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        edge_dim: int,
+        hidden_dim: int = 128,
+        num_layers: int = 3,
+        dropout: float = 0.1,
+        pooling: str = "add",
+        batch_norm: bool = True,
+    ) -> None:
+        super().__init__()
+
+        if pooling not in {"mean", "add", "max", "mean_add_max"}:
+            raise ValueError(
+                "pooling must be one of: 'mean', 'add', 'max', 'mean_add_max'"
+            )
+
+        self.pooling = pooling
+        self.dropout = nn.Dropout(dropout)
+
+        self.node_encoder = nn.Linear(input_dim, hidden_dim)
+
+        self.convs = nn.ModuleList()
+        self.batch_norms = nn.ModuleList()
+
+        for _ in range(num_layers):
+            mlp = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+            )
+
+            self.convs.append(
+                GINEConv(
+                    nn=mlp,
+                    edge_dim=edge_dim,
+                )
+            )
+
+            if batch_norm:
+                self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
+            else:
+                self.batch_norms.append(nn.Identity())
+
+        if pooling == "mean_add_max":
+            pooled_dim = hidden_dim * 3
+        else:
+            pooled_dim = hidden_dim
+
+        self.head = nn.Sequential(
+            nn.Linear(pooled_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 1),
+        )
+
+    def _pool(self, x: torch.Tensor, batch: torch.Tensor) -> torch.Tensor:
+        if self.pooling == "mean":
+            return global_mean_pool(x, batch)
+
+        if self.pooling == "add":
+            return global_add_pool(x, batch)
+
+        if self.pooling == "max":
+            return global_max_pool(x, batch)
+
+        mean_pool = global_mean_pool(x, batch)
+        add_pool = global_add_pool(x, batch)
+        max_pool = global_max_pool(x, batch)
+        return torch.cat([mean_pool, add_pool, max_pool], dim=1)
+
+    def forward(self, data: Data) -> torch.Tensor:
+        x = data.x
+        edge_index = data.edge_index
+        edge_attr = data.edge_attr
+        batch = data.batch
+
+        x = self.node_encoder(x)
+        x = torch.relu(x)
+
+        for conv, batch_norm in zip(self.convs, self.batch_norms):
+            x = conv(x, edge_index, edge_attr)
+            x = batch_norm(x)
+            x = torch.relu(x)
+            x = self.dropout(x)
+
+        x = self._pool(x, batch)
+        return self.head(x)
 
 def init_linear_weights(module: nn.Module) -> None:
     if isinstance(module, nn.Linear):
@@ -294,7 +429,9 @@ def fit_model(
 
     history = []
     best_state = None
+    best_epoch = None
     best_val_loss = float("inf")
+    best_val_rmse = float("inf")
 
     for epoch in range(1, epochs + 1):
         train_res = train_one_epoch(model, train_loader, optimizer, criterion, device)
@@ -313,8 +450,10 @@ def fit_model(
         }
         history.append(row)
 
-        if val_res.loss < best_val_loss:
+        if val_res.rmse < best_val_rmse:
+            best_epoch = epoch
             best_val_loss = val_res.loss
+            best_val_rmse = val_res.rmse
             best_state = {
                 key: value.detach().cpu().clone()
                 for key, value in model.state_dict().items()
@@ -333,4 +472,8 @@ def fit_model(
         model.load_state_dict(best_state)
 
     history_df = pd.DataFrame(history)
+    history_df.attrs["best_epoch"] = best_epoch
+    history_df.attrs["best_val_loss"] = best_val_loss
+    history_df.attrs["best_val_rmse"] = best_val_rmse
+
     return model, history_df
