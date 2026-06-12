@@ -1,6 +1,6 @@
 # ChEMBL Analysis – EGFR Activity Prediction
 
-Projekt kursowy zrealizowany w ramach przedmiotu **„Warsztaty sztucznej inteligencji”**.  
+Projekt zrealizowany w ramach przedmiotu **„Warsztaty sztucznej inteligencji”**.  
 Celem projektu jest przygotowanie danych z bazy ChEMBL oraz budowa modeli regresyjnych przewidujących aktywność biologiczną cząsteczek względem receptora **EGFR** (`CHEMBL203`).
 
 Projekt obejmuje pełny pipeline:
