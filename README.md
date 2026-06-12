@@ -237,10 +237,6 @@ Do uruchamiania notebooków i całego pipeline'u mogą być również potrzebne:
 pip install jupyter matplotlib scikit-learn pyspark
 ```
 
-Instalacja PyTorch i PyTorch Geometric może zależeć od systemu operacyjnego oraz używanej wersji CUDA.
-
-PySpark wymaga lokalnej instalacji Javy. Nie jest jednak potrzebny do samego uruchomienia aplikacji predykcyjnej.
-
 ## Uruchomienie aplikacji Streamlit
 
 W katalogu głównym projektu wykonaj:
@@ -307,10 +303,3 @@ Projekt wykorzystuje między innymi:
 
 Dane pochodzą z bazy [ChEMBL](https://www.ebi.ac.uk/chembl/), zawierającej informacje o bioaktywnych cząsteczkach i ich aktywności względem targetów biologicznych.
 
-## Ograniczenia
-
-- Model został przygotowany jako projekt edukacyjny.
-- Predykcje dotyczą wyłącznie aktywności względem EGFR (`CHEMBL203`).
-- Wyniki zależą od zakresu i jakości danych treningowych.
-- Model nie zastępuje eksperymentów laboratoryjnych.
-- Aplikacja nie powinna być używana do podejmowania decyzji medycznych ani klinicznych.
