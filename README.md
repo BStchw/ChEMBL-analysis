@@ -166,10 +166,6 @@ Wyniki zapisane w notebooku treningowym:
 | Random | 0.918 | 0.686 | 0.544 |
 | Scaffold | 0.963 | 0.749 | 0.393 |
 
-Random split daje lepszy wynik, ponieważ jest mniej wymagający pod względem różnic strukturalnych między zbiorem treningowym i testowym.
-
-Wartość `R²` nie oznacza procentu poprawnych predykcji. Jest to miara określająca, jaką część zmienności wartości docelowej wyjaśnia model.
-
 Model GINE został wybrany do finalnej aplikacji ze względu na grafową reprezentację cząsteczek oraz możliwość wykorzystania informacji o atomach i wiązaniach. MLP pozostaje ważnym modelem bazowym i w części eksperymentów może osiągać lepsze wyniki.
 
 ## Struktura repozytorium
