@@ -1,165 +1,320 @@
-# ChEMBL-analysis
+# ChEMBL Analysis – EGFR Activity Prediction
 
-Projekt kursowy poświęcony analizie danych z **ChEMBL** i budowie prostych modeli uczenia maszynowego do przewidywania aktywności biologicznej cząsteczek na podstawie ich struktury.
+Projekt kursowy zrealizowany w ramach przedmiotu **„Warsztaty sztucznej inteligencji”**.  
+Celem projektu jest przygotowanie danych z bazy ChEMBL oraz budowa modeli regresyjnych przewidujących aktywność biologiczną cząsteczek względem receptora **EGFR** (`CHEMBL203`).
 
-Repozytorium obejmuje cały pipeline:
-- eksploracyjną analizę danych (EDA),
-- przygotowanie czystego zbioru do modelowania,
-- dwa rodzaje splitów danych (**random** i **scaffold**),
-- dwa modele bazowe:
-  - **MLP** na fingerprintach Morgan,
-  - **GNN (GCN)** na grafowej reprezentacji cząsteczek.
+Projekt obejmuje pełny pipeline:
 
-## Cel projektu
+- eksploracyjną analizę danych,
+- czyszczenie i przygotowanie danych ChEMBL,
+- transformację wartości `IC50` do `pIC50`,
+- podział danych metodą random split i scaffold split,
+- model bazowy MLP oparty na fingerprintach Morgan,
+- modele grafowe GCN i GINE,
+- zapis wytrenowanego modelu GINE,
+- predykcję dla pojedynczej cząsteczki zapisanej jako SMILES,
+- prosty interfejs użytkownika zbudowany w Streamlit.
 
-Celem projektu przewidywanie aktywności biologicznej związków chemicznych oraz porównanie:
-- klasycznego podejścia opartego o fingerprinty,
-- podejścia grafowego,
-- łatwiejszego **random split** z bardziej wymagającym **scaffold split**.
+## Finalna funkcjonalność
 
-## Zakres prac
+Aplikacja przyjmuje zapis cząsteczki w formacie **SMILES** i zwraca:
 
-Projekt został zbudowany wokół następującego workflow:
+- przewidywaną wartość `pIC50`,
+- przybliżoną wartość `IC50` w nanomolach,
+- podstawowe informacje o wykorzystanym modelu.
 
-1. **EDA danych ChEMBL**
-   - analiza braków danych,
-   - rozkładów `standard_type`, `standard_units`, `standard_relation`,
-   - identyfikacja duplikatów i problemów jakości danych.
+Uruchomienie aplikacji:
 
-2. **Przygotowanie datasetu**
-   - filtrowanie do jednego typu aktywności (domyślnie `IC50`),
-   - ograniczenie do jednego targetu białkowego,
-   - konwersja wartości do wspólnej skali,
-   - transformacja do **pIC50**,
-   - agregacja wielokrotnych pomiarów do jednej etykiety na cząsteczkę.
+```bash
+streamlit run app.py
+```
 
-3. **Podział danych**
-   - **random split** 80/10/10,
-   - **scaffold split** 80/10/10 (na scaffoldach Bemisa–Murcko).
+## Cel predykcji
 
-4. **Modele bazowe**
-   - **MLP** na fingerprintach Morgan,
-   - **GNN** z warstwami `GCNConv` i `global_mean_pool`.
+Model przewiduje aktywność związku chemicznego względem:
 
-## Struktura repozytorium
+- **Target:** Epidermal growth factor receptor
+- **Skrót:** EGFR
+- **ChEMBL ID:** `CHEMBL203`
+- **Typ aktywności:** `IC50`
+- **Problem:** regresja
 
-W repozytorium znajdują się obecnie notebooki i pliki Pythona odpowiadające kolejnym etapom pipeline’u: `EDA_ChEMBL.ipynb`, `data_preparation.py`, `prepare_dataset.ipynb`, `splits.py`, `mlp_model.py`, `train_mlp.ipynb`, `gnn_model.py`, `train_gnn.ipynb` oraz katalog `prepared_data/`.
+Wartość docelowa jest obliczana według wzoru:
 
 ```text
-ChEMBL-analysis/
-├── EDA_ChEMBL.ipynb         # eksploracyjna analiza danych
-├── data_preparation.py      # funkcje do filtrowania i budowy datasetu
-├── prepare_dataset.ipynb    # przygotowanie finalnego zbioru do modelowania
-├── splits.py                # random split i scaffold split
-├── mlp_model.py             # model MLP + fingerprinting Morgan
-├── train_mlp.ipynb          # trening i ewaluacja MLP
-├── gnn_model.py             # model GNN (GCN) dla grafów molekularnych
-├── train_gnn.ipynb          # trening i ewaluacja GNN
-├── prepared_data/           # zapisane splity i gotowe pliki CSV
-└── README.md
+pIC50 = 9 - log10(IC50 [nM])
 ```
+
+Większa wartość `pIC50` oznacza większą przewidywaną aktywność związku.
 
 ## Przygotowanie danych
 
-Dane są filtrowane tak, aby otrzymać możliwie spójny problem regresyjny:
-- pojedynczy target białkowy,
-- jeden typ aktywności (`IC50`),
-- tylko rekordy z `standard_relation = "="`,
-- wspólne jednostki aktywności,
-- poprawne struktury (`canonical_smiles`),
-- agregacja powtarzających się pomiarów.
+Dane są filtrowane w celu utworzenia możliwie spójnego problemu regresyjnego. Pipeline obejmuje między innymi:
 
-Docelowy target regresyjny to:
+- wybór jednego targetu białkowego,
+- ograniczenie danych do pomiarów `IC50`,
+- wybór rekordów ze `standard_relation = "="`,
+- ujednolicenie jednostek,
+- odrzucenie brakujących lub niepoprawnych struktur,
+- walidację zapisów `canonical_smiles`,
+- transformację `IC50` do `pIC50`,
+- agregację wielokrotnych pomiarów tej samej cząsteczki.
 
-```text
-pIC50 = 9 - log10(IC50 w nM)
-```
+## Podział danych
 
-Dzięki temu rozkład wartości jest stabilniejszy niż przy surowym `IC50`.
+W projekcie wykorzystano dwa sposoby podziału danych:
+
+### Random split
+
+Losowy podział cząsteczek w proporcji:
+
+- 80% – zbiór treningowy,
+- 10% – zbiór walidacyjny,
+- 10% – zbiór testowy.
+
+Random split jest prostszy, ponieważ podobne strukturalnie cząsteczki mogą znaleźć się w różnych częściach zbioru.
+
+### Scaffold split
+
+Podział oparty na scaffoldach Bemisa–Murcko. Cząsteczki posiadające ten sam główny szkielet chemiczny trafiają do tej samej części zbioru.
+
+Scaffold split lepiej sprawdza zdolność modelu do generalizacji na nowe rodziny struktur chemicznych i zwykle stanowi trudniejsze zadanie niż random split.
 
 ## Modele
 
-### 1. MLP baseline
-Wejście:
-- **Morgan fingerprint** (2048 bitów)
+### MLP baseline
 
-Architektura:
-- `2048 -> 512 -> 128 -> 1`
-- aktywacja `ReLU`
-- loss: `MSE`
-- optimizer: `Adam`
+Model bazowy wykorzystuje fingerprinty Morgan jako liczbową reprezentację cząsteczki.
 
-### 2. GNN baseline
-Wejście:
-- graf cząsteczki:
-  - węzły = atomy,
-  - krawędzie = wiązania,
-  - cechy węzłów = minimalny zestaw cech atomowych.
+**Wejście:**
 
-Architektura:
-- `GCNConv(input, 64) -> ReLU`
-- `GCNConv(64, 64) -> ReLU`
-- `GCNConv(64, 64) -> ReLU`
-- `global_mean_pool`
-- `Linear(64, 32) -> ReLU`
-- `Linear(32, 1)`
+- Morgan fingerprint,
+- promień: 2,
+- długość: 2048 bitów.
 
-## Wyniki bazowe
+**Architektura:**
 
-Na podstawie dotychczasowych eksperymentów:
+```text
+2048 -> 512 -> 128 -> 1
+```
 
-### MLP
-- **random split**: RMSE ≈ **0.708**, R² ≈ **0.640**
-- **scaffold split**: RMSE ≈ **0.931**, R² ≈ **0.353**
+Model wykorzystuje:
 
-### GNN
-- **random split**: RMSE ≈ **1.070**, R² ≈ **0.178**
-- **scaffold split**: RMSE ≈ **1.078**, R² ≈ **0.132**
+- aktywację ReLU,
+- funkcję straty MSE,
+- optymalizator Adam.
 
-### Wniosek
-W tej wersji projektu **MLP na fingerprintach Morgan działa lepiej niż prosty baseline GNN**. Jednocześnie scaffold split okazał się wyraźnie trudniejszy niż random split, co jest zgodne z oczekiwaniami dla danych chemoinformatycznych.
+MLP pełni rolę klasycznego baseline'u, z którym można porównywać modele grafowe.
 
-## Jak uruchomić projekt
+### GCN baseline
 
-### 1. EDA
-Uruchom:
-- `EDA_ChEMBL.ipynb`
+Pierwszy model grafowy wykorzystuje warstwy `GCNConv`. Cząsteczka jest reprezentowana jako graf:
 
-### 2. Przygotowanie datasetu
-Uruchom:
-- `prepare_dataset.ipynb`
+- węzły odpowiadają atomom,
+- krawędzie odpowiadają wiązaniom chemicznym.
 
-Notebook zapisuje gotowe pliki do katalogu `prepared_data/`, m.in.:
-- `chembl_ic50_model_dataset.csv`
-- `train_random.csv`
-- `val_random.csv`
-- `test_random.csv`
-- `train_scaffold.csv`
-- `val_scaffold.csv`
-- `test_scaffold.csv`
-- `train_random_tiny.csv`
+GCN został wykorzystany jako prosty grafowy model bazowy.
 
-### 3. Trening MLP
-Uruchom:
-- `train_mlp.ipynb`
+### Finalny model GINE
 
-### 4. Trening GNN
-Uruchom:
-- `train_gnn.ipynb`
+Do finalnej predykcji wykorzystano model **GINE** (`Graph Isomorphism Network with Edge Features`).
 
-## Wymagania
+W odróżnieniu od prostego GCN model GINE wykorzystuje zarówno:
 
-Projekt korzysta m.in. z:
-- Python
-- Jupyter Notebook
-- PySpark
-- pandas
-- RDKit
-- PyTorch
-- PyTorch Geometric
-- matplotlib
+- cechy atomów,
+- cechy wiązań chemicznych.
 
+**Przykładowe cechy atomów:**
+
+- liczba atomowa,
+- stopień atomu,
+- ładunek formalny,
+- aromatyczność,
+- przynależność do pierścienia,
+- liczba atomów wodoru,
+- hybrydyzacja.
+
+**Przykładowe cechy wiązań:**
+
+- typ wiązania,
+- sprzężenie,
+- przynależność do pierścienia,
+- stereochemia.
+
+**Architektura finalnego modelu:**
+
+- liniowy encoder cech atomowych,
+- 3 warstwy `GINEConv`,
+- `BatchNorm`,
+- aktywacja ReLU,
+- dropout `0.1`,
+- połączenie `mean`, `add` i `max pooling`,
+- głowica regresyjna zakończona pojedynczą wartością `pIC50`.
+
+Wytrenowany checkpoint znajduje się w:
+
+```text
+models/gine_egfr_chembl203.pt
+```
+
+## Wyniki finalnego modelu GINE
+
+Wyniki zapisane w notebooku treningowym:
+
+| Split | RMSE | MAE | R² |
+|---|---:|---:|---:|
+| Random | 0.918 | 0.686 | 0.544 |
+| Scaffold | 0.963 | 0.749 | 0.393 |
+
+Random split daje lepszy wynik, ponieważ jest mniej wymagający pod względem różnic strukturalnych między zbiorem treningowym i testowym.
+
+Wartość `R²` nie oznacza procentu poprawnych predykcji. Jest to miara określająca, jaką część zmienności wartości docelowej wyjaśnia model.
+
+Model GINE został wybrany do finalnej aplikacji ze względu na grafową reprezentację cząsteczek oraz możliwość wykorzystania informacji o atomach i wiązaniach. MLP pozostaje ważnym modelem bazowym i w części eksperymentów może osiągać lepsze wyniki.
+
+## Struktura repozytorium
+
+```text
+ChEMBL-analysis/
+├── EDA_ChEMBL.ipynb
+├── data_preparation.py
+├── prepare_dataset.ipynb
+├── splits.py
+├── mlp_model.py
+├── train_mlp.ipynb
+├── gnn_model.py
+├── train_gnn.ipynb
+├── predict_gnn.ipynb
+├── predict_smiles.py
+├── app.py
+├── models/
+│   └── gine_egfr_chembl203.pt
+├── prepared_data/
+│   ├── chembl_ic50_model_dataset.csv
+│   ├── train_random.csv
+│   ├── val_random.csv
+│   ├── test_random.csv
+│   ├── train_scaffold.csv
+│   ├── val_scaffold.csv
+│   ├── test_scaffold.csv
+│   └── train_random_tiny.csv
+└── README.md
+```
+
+## Instalacja
+
+Zalecany Python: **3.11**.
+
+### 1. Klonowanie repozytorium
+
+```bash
+git clone https://github.com/BStchw/ChEMBL-analysis.git
+cd ChEMBL-analysis
+```
+
+### 2. Utworzenie środowiska wirtualnego
+
+Windows:
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+Linux/macOS:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+### 3. Instalacja bibliotek potrzebnych do aplikacji
+
+```bash
+python -m pip install --upgrade pip
+pip install streamlit numpy pandas rdkit torch torch-geometric
+```
+
+Do uruchamiania notebooków i całego pipeline'u mogą być również potrzebne:
+
+```bash
+pip install jupyter matplotlib scikit-learn pyspark
+```
+
+Instalacja PyTorch i PyTorch Geometric może zależeć od systemu operacyjnego oraz używanej wersji CUDA.
+
+PySpark wymaga lokalnej instalacji Javy. Nie jest jednak potrzebny do samego uruchomienia aplikacji predykcyjnej.
+
+## Uruchomienie aplikacji Streamlit
+
+W katalogu głównym projektu wykonaj:
+
+```bash
+streamlit run app.py
+```
+
+Aplikacja:
+
+1. wczyta checkpoint modelu z katalogu `models/`,
+2. przyjmie SMILES podany przez użytkownika,
+3. zamieni cząsteczkę na graf,
+4. wykona predykcję `pIC50`,
+5. przeliczy wynik na przybliżone `IC50` w nM.
+
+## Predykcja bez interfejsu
+
+Przykładową predykcję można uruchomić również z terminala:
+
+```bash
+python predict_smiles.py
+```
+
+Skrypt wykorzystuje przykładową cząsteczkę SMILES i wypisuje:
+
+- nazwę targetu,
+- podany SMILES,
+- przewidywane `pIC50`,
+- przybliżone `IC50` w nM.
+
+## Notebooki
+
+Zalecana kolejność pracy:
+
+1. `EDA_ChEMBL.ipynb` – eksploracyjna analiza danych,
+2. `prepare_dataset.ipynb` – przygotowanie zbioru i splitów,
+3. `train_mlp.ipynb` – trening modelu MLP,
+4. `train_gnn.ipynb` – trening i ewaluacja modeli grafowych,
+5. `predict_gnn.ipynb` – testowanie predykcji zapisanego modelu.
+
+Notebooki można uruchomić poleceniem:
+
+```bash
+jupyter notebook
+```
+
+## Technologie
+
+Projekt wykorzystuje między innymi:
+
+- Python,
+- pandas,
+- NumPy,
+- PySpark,
+- RDKit,
+- PyTorch,
+- PyTorch Geometric,
+- Streamlit,
+- Jupyter Notebook,
+- Matplotlib.
 
 ## Źródło danych
 
-Dataset https://www.ebi.ac.uk/chembl/api/data
+Dane pochodzą z bazy [ChEMBL](https://www.ebi.ac.uk/chembl/), zawierającej informacje o bioaktywnych cząsteczkach i ich aktywności względem targetów biologicznych.
+
+## Ograniczenia
+
+- Model został przygotowany jako projekt edukacyjny.
+- Predykcje dotyczą wyłącznie aktywności względem EGFR (`CHEMBL203`).
+- Wyniki zależą od zakresu i jakości danych treningowych.
+- Model nie zastępuje eksperymentów laboratoryjnych.
+- Aplikacja nie powinna być używana do podejmowania decyzji medycznych ani klinicznych.
