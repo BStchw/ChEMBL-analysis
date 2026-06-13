@@ -106,15 +106,6 @@ Model wykorzystuje:
 
 MLP pełni rolę klasycznego baseline'u, z którym można porównywać modele grafowe.
 
-### GCN baseline
-
-Pierwszy model grafowy wykorzystuje warstwy `GCNConv`. Cząsteczka jest reprezentowana jako graf:
-
-- węzły odpowiadają atomom,
-- krawędzie odpowiadają wiązaniom chemicznym.
-
-GCN został wykorzystany jako prosty grafowy model bazowy.
-
 ### Finalny model GINE
 
 Do finalnej predykcji wykorzystano model **GINE** (`Graph Isomorphism Network with Edge Features`).
