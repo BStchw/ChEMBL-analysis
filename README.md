@@ -10,7 +10,7 @@ Projekt obejmuje pełny pipeline:
 - transformację wartości `IC50` do `pIC50`,
 - podział danych metodą random split i scaffold split,
 - model bazowy MLP oparty na fingerprintach Morgan,
-- modele grafowe GCN i GINE,
+- model grafowy GINE,
 - zapis wytrenowanego modelu GINE,
 - predykcję dla pojedynczej cząsteczki zapisanej jako SMILES,
 - prosty interfejs użytkownika zbudowany w Streamlit.
